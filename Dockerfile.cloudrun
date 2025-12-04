@@ -1,0 +1,39 @@
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install system dependencies
+# git: required for comfy-cli/cloning
+# libgl1, libglib2.0-0: required for opencv/image processing often used by ComfyUI nodes
+RUN apt-get update && apt-get install -y \
+    git \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+# minimal list as requested + numpy/pillow for worker_logic + comfy-cli for installation
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    google-cloud-storage \
+    numpy \
+    pillow \
+    comfy-cli
+
+# Install ComfyUI via comfy-cli
+# We install it into /app/ComfyUI so it aligns with worker_logic.py expectations
+RUN comfy --workspace /app/ComfyUI install --nvidia
+
+# Copy application code
+COPY worker_logic.py /app/
+COPY src /app/src/
+
+# Expose the port (Cloud Run defaults to 8080)
+EXPOSE 8080
+
+# Start the application
+CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8080"]
